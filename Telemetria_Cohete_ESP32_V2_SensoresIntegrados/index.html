@@ -1,0 +1,863 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Telemetría Cohete - Centro de Control</title>
+
+    <!-- Highcharts local desde SPIFFS -->
+    <script src="/highcharts.js"></script>
+
+    <style>
+        :root {
+            --bg-main: #050816;
+            --bg-panel: #0b1224;
+            --bg-card: #101a33;
+            --bg-card-soft: #13203d;
+            --accent-cyan: #00e5ff;
+            --accent-green: #00ff99;
+            --accent-yellow: #ffcc00;
+            --accent-red: #ff4d4d;
+            --accent-blue: #4da6ff;
+            --text-main: #ffffff;
+            --text-muted: #91a4c7;
+            --border-soft: rgba(0, 229, 255, 0.18);
+            --shadow-cyan: 0 0 20px rgba(0, 229, 255, 0.12);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: "Segoe UI", Arial, sans-serif;
+            background:
+                radial-gradient(circle at top left, rgba(0, 229, 255, 0.10), transparent 35%),
+                radial-gradient(circle at bottom right, rgba(0, 255, 153, 0.08), transparent 35%),
+                var(--bg-main);
+            color: var(--text-main);
+        }
+
+        .layout {
+            display: grid;
+            grid-template-columns: 250px 1fr;
+            min-height: 100vh;
+        }
+
+        .sidebar {
+            background: rgba(8, 15, 32, 0.96);
+            border-right: 1px solid var(--border-soft);
+            padding: 24px 20px;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 36px;
+        }
+
+        .logo-icon {
+            width: 42px;
+            height: 42px;
+            border-radius: 12px;
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-green));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #001014;
+            font-weight: bold;
+            box-shadow: 0 0 18px rgba(0, 229, 255, 0.4);
+        }
+
+        .logo-text {
+            font-size: 15px;
+            line-height: 1.2;
+            color: var(--text-main);
+        }
+
+        .nav-title {
+            color: var(--text-muted);
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 10px;
+        }
+
+        .nav-item {
+            padding: 12px 14px;
+            border-radius: 12px;
+            margin-bottom: 10px;
+            color: var(--text-muted);
+            background: transparent;
+            border: 1px solid transparent;
+        }
+
+        .nav-item.active {
+            color: var(--accent-cyan);
+            background: rgba(0, 229, 255, 0.09);
+            border-color: rgba(0, 229, 255, 0.20);
+        }
+
+        .main {
+            padding: 28px;
+        }
+
+        .topbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 24px;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 30px;
+            letter-spacing: 0.5px;
+        }
+
+        .subtitle {
+            margin-top: 8px;
+            color: var(--text-muted);
+            font-size: 14px;
+        }
+
+        .connection-box {
+            text-align: right;
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+
+        .status-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 14px;
+            border-radius: 999px;
+            border: 1px solid var(--border-soft);
+            background: rgba(0, 229, 255, 0.07);
+            color: var(--accent-cyan);
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .dot {
+            width: 9px;
+            height: 9px;
+            border-radius: 50%;
+            background: var(--accent-red);
+            box-shadow: 0 0 10px var(--accent-red);
+        }
+
+        .dot.connected {
+            background: var(--accent-green);
+            box-shadow: 0 0 10px var(--accent-green);
+        }
+
+        .section-title {
+            margin: 22px 0 14px;
+            font-size: 20px;
+            color: var(--accent-cyan);
+            border-bottom: 1px solid var(--border-soft);
+            padding-bottom: 10px;
+        }
+
+        .cards {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(160px, 1fr));
+            gap: 16px;
+            margin-bottom: 22px;
+        }
+
+        .card {
+            background: linear-gradient(180deg, var(--bg-card), #0b1224);
+            border: 1px solid var(--border-soft);
+            border-radius: 18px;
+            padding: 18px;
+            box-shadow: var(--shadow-cyan);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .card::after {
+            content: "";
+            position: absolute;
+            right: -40px;
+            top: -40px;
+            width: 110px;
+            height: 110px;
+            border-radius: 50%;
+            background: rgba(0, 229, 255, 0.06);
+        }
+
+        .card-label {
+            color: var(--text-muted);
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            margin-bottom: 10px;
+        }
+
+        .card-value {
+            font-size: 28px;
+            font-weight: 700;
+        }
+
+        .card-unit {
+            font-size: 14px;
+            color: var(--text-muted);
+            margin-left: 4px;
+        }
+
+        .grid-charts {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 18px;
+        }
+
+        .chart-container {
+            background: linear-gradient(180deg, var(--bg-card), #0b1224);
+            border: 1px solid var(--border-soft);
+            border-radius: 18px;
+            padding: 16px;
+            box-shadow: var(--shadow-cyan);
+            min-height: 360px;
+        }
+
+        .gps-panel {
+            display: grid;
+            grid-template-columns: 1.1fr 1.9fr;
+            gap: 18px;
+            margin-top: 18px;
+        }
+
+        .gps-status {
+            background: linear-gradient(180deg, var(--bg-card), #0b1224);
+            border: 1px solid var(--border-soft);
+            border-radius: 18px;
+            padding: 18px;
+            box-shadow: var(--shadow-cyan);
+        }
+
+        .gps-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 14px;
+        }
+
+        .gps-item {
+            background: rgba(0, 229, 255, 0.05);
+            border: 1px solid rgba(0, 229, 255, 0.12);
+            border-radius: 14px;
+            padding: 14px;
+        }
+
+        .gps-label {
+            color: var(--text-muted);
+            font-size: 12px;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+        }
+
+        .gps-value {
+            font-size: 18px;
+            font-weight: 700;
+            word-break: break-word;
+        }
+
+        .footer {
+            margin-top: 24px;
+            color: var(--text-muted);
+            font-size: 12px;
+            text-align: right;
+        }
+
+        @media (max-width: 1000px) {
+            .layout {
+                grid-template-columns: 1fr;
+            }
+
+            .sidebar {
+                display: none;
+            }
+
+            .cards {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .grid-charts,
+            .gps-panel {
+                grid-template-columns: 1fr;
+            }
+
+            .gps-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @media (max-width: 600px) {
+            .main {
+                padding: 18px;
+            }
+
+            .cards,
+            .gps-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .topbar {
+                flex-direction: column;
+                gap: 16px;
+            }
+
+            .connection-box {
+                text-align: left;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="layout">
+        <aside class="sidebar">
+            <div class="logo">
+                <div class="logo-icon">🚀</div>
+                <div class="logo-text">
+                    <strong>Telemetría</strong><br>
+                    Cohete ESP32
+                </div>
+            </div>
+
+            <div class="nav-title">Sistema</div>
+            <div class="nav-item active">📡 Dashboard</div>
+            <div class="nav-item">🌡 BMP280</div>
+            <div class="nav-item">🧭 MPU6050</div>
+            <div class="nav-item">🛰 GPS Neo-6M</div>
+            <div class="nav-item">⚙ Estado</div>
+        </aside>
+
+        <main class="main">
+            <div class="topbar">
+                <div>
+                    <h1>Centro de Control de Telemetría</h1>
+                    <div class="subtitle">
+                        Monitoreo en tiempo real desde ESP32, BMP280, MPU6050 y GPS Neo-6M
+                    </div>
+                </div>
+
+                <div class="connection-box">
+                    <div class="status-pill">
+                        <span id="statusDot" class="dot"></span>
+                        <span id="statusText">Desconectado</span>
+                    </div>
+                    <div id="lastUpdate">Última actualización: --</div>
+                </div>
+            </div>
+
+            <div class="section-title">Resumen de vuelo</div>
+
+            <section class="cards">
+                <div class="card">
+                    <div class="card-label">Temperatura</div>
+                    <span id="tempValue" class="card-value">--</span>
+                    <span class="card-unit">°C</span>
+                </div>
+
+                <div class="card">
+                    <div class="card-label">Presión</div>
+                    <span id="baroValue" class="card-value">--</span>
+                    <span class="card-unit">hPa</span>
+                </div>
+
+                <div class="card">
+                    <div class="card-label">Altitud barométrica</div>
+                    <span id="altValue" class="card-value">--</span>
+                    <span class="card-unit">m</span>
+                </div>
+
+                <div class="card">
+                    <div class="card-label">Aceleración total</div>
+                    <span id="acelValue" class="card-value">--</span>
+                    <span class="card-unit">G</span>
+                </div>
+            </section>
+
+            <div class="section-title">Gráficas principales</div>
+
+            <section class="grid-charts">
+                <div id="grafica-acel" class="chart-container"></div>
+                <div id="grafica-alt" class="chart-container"></div>
+                <div id="grafica-temp" class="chart-container"></div>
+                <div id="grafica-baro" class="chart-container"></div>
+            </section>
+
+            <div class="section-title">Movimiento y orientación</div>
+
+            <section class="grid-charts">
+                <div id="grafica-acc-ejes" class="chart-container"></div>
+                <div id="grafica-gyro-ejes" class="chart-container"></div>
+            </section>
+
+            <div class="section-title">Datos GPS</div>
+
+            <section class="gps-panel">
+                <div class="gps-status">
+                    <div class="card-label">Estado del GPS</div>
+                    <div style="font-size: 30px; font-weight: 700; margin-bottom: 12px;" id="gpsFixText">
+                        Sin FIX
+                    </div>
+                    <div style="color: var(--text-muted); line-height: 1.6;">
+                        El GPS puede tardar varios minutos en obtener ubicación válida.
+                        Para mejores resultados, realiza la prueba en exterior con la antena mirando al cielo.
+                    </div>
+                </div>
+
+                <div class="gps-grid">
+                    <div class="gps-item">
+                        <div class="gps-label">Satélites</div>
+                        <div id="gpsSat" class="gps-value">--</div>
+                    </div>
+
+                    <div class="gps-item">
+                        <div class="gps-label">Latitud</div>
+                        <div id="gpsLat" class="gps-value">--</div>
+                    </div>
+
+                    <div class="gps-item">
+                        <div class="gps-label">Longitud</div>
+                        <div id="gpsLon" class="gps-value">--</div>
+                    </div>
+
+                    <div class="gps-item">
+                        <div class="gps-label">Altitud GPS</div>
+                        <div id="gpsAlt" class="gps-value">-- m</div>
+                    </div>
+
+                    <div class="gps-item">
+                        <div class="gps-label">Velocidad</div>
+                        <div id="gpsSpeed" class="gps-value">-- km/h</div>
+                    </div>
+
+                    <div class="gps-item">
+                        <div class="gps-label">Hora UTC</div>
+                        <div id="gpsTime" class="gps-value">--:--:--</div>
+                    </div>
+
+                    <div class="gps-item">
+                        <div class="gps-label">Fecha UTC</div>
+                        <div id="gpsDate" class="gps-value">--/--/----</div>
+                    </div>
+
+                    <div class="gps-item">
+                        <div class="gps-label">Caracteres GPS</div>
+                        <div id="gpsChars" class="gps-value">--</div>
+                    </div>
+
+                    <div class="gps-item">
+                        <div class="gps-label">Recepción UART</div>
+                        <div id="gpsOk" class="gps-value">--</div>
+                    </div>
+                </div>
+            </section>
+
+            <div class="footer">
+                Sistema de telemetría ESP32 | WebSocket activo | SPIFFS
+            </div>
+        </main>
+    </div>
+
+    <script>
+        Highcharts.setOptions({
+            chart: {
+                backgroundColor: 'transparent',
+                style: {
+                    fontFamily: 'Segoe UI, Arial, sans-serif'
+                }
+            },
+            title: {
+                style: {
+                    color: '#ffffff',
+                    fontWeight: '600'
+                }
+            },
+            xAxis: {
+                type: 'datetime',
+                labels: {
+                    style: {
+                        color: '#91a4c7'
+                    }
+                },
+                gridLineColor: 'rgba(145,164,199,0.12)',
+                lineColor: 'rgba(145,164,199,0.25)',
+                tickColor: 'rgba(145,164,199,0.25)'
+            },
+            yAxis: {
+                labels: {
+                    style: {
+                        color: '#91a4c7'
+                    }
+                },
+                title: {
+                    style: {
+                        color: '#91a4c7'
+                    }
+                },
+                gridLineColor: 'rgba(145,164,199,0.12)'
+            },
+            legend: {
+                itemStyle: {
+                    color: '#ffffff'
+                },
+                itemHoverStyle: {
+                    color: '#00e5ff'
+                }
+            },
+            tooltip: {
+                backgroundColor: '#101a33',
+                borderColor: '#00e5ff',
+                style: {
+                    color: '#ffffff'
+                },
+                shared: true
+            },
+            credits: {
+                enabled: false
+            },
+            plotOptions: {
+                spline: {
+                    marker: {
+                        enabled: false
+                    },
+                    lineWidth: 2.5
+                },
+                series: {
+                    animation: false
+                }
+            }
+        });
+
+        function crearGraficaSimple(id, titulo, unidad, color) {
+            return Highcharts.chart(id, {
+                chart: {
+                    type: 'spline'
+                },
+                title: {
+                    text: titulo
+                },
+                yAxis: {
+                    title: {
+                        text: unidad
+                    }
+                },
+                series: [{
+                    name: titulo,
+                    data: [],
+                    color: color
+                }]
+            });
+        }
+
+        function crearGraficaMultiple(id, titulo, unidad, seriesConfig) {
+            return Highcharts.chart(id, {
+                chart: {
+                    type: 'spline'
+                },
+                title: {
+                    text: titulo
+                },
+                yAxis: {
+                    title: {
+                        text: unidad
+                    }
+                },
+                series: seriesConfig
+            });
+        }
+
+        const chartAcel = crearGraficaSimple(
+            'grafica-acel',
+            'Aceleración total',
+            'G',
+            '#ff4d4d'
+        );
+
+        const chartAlt = crearGraficaSimple(
+            'grafica-alt',
+            'Altitud barométrica',
+            'm',
+            '#4da6ff'
+        );
+
+        const chartTemp = crearGraficaSimple(
+            'grafica-temp',
+            'Temperatura BMP280',
+            '°C',
+            '#ffcc00'
+        );
+
+        const chartBaro = crearGraficaSimple(
+            'grafica-baro',
+            'Presión atmosférica',
+            'hPa',
+            '#00ff99'
+        );
+
+        const chartAccEjes = crearGraficaMultiple(
+            'grafica-acc-ejes',
+            'Aceleración por ejes',
+            'm/s²',
+            [
+                { name: 'AX', data: [], color: '#00e5ff' },
+                { name: 'AY', data: [], color: '#00ff99' },
+                { name: 'AZ', data: [], color: '#ffcc00' }
+            ]
+        );
+
+        const chartGyroEjes = crearGraficaMultiple(
+            'grafica-gyro-ejes',
+            'Giroscopio por ejes',
+            '°/s',
+            [
+                { name: 'GX', data: [], color: '#4da6ff' },
+                { name: 'GY', data: [], color: '#ff4d4d' },
+                { name: 'GZ', data: [], color: '#b366ff' }
+            ]
+        );
+
+        function agregarPunto(chart, serieIndex, x, y, maxPuntos = 50) {
+            const serie = chart.series[serieIndex];
+            const shift = serie.data.length > maxPuntos;
+            serie.addPoint([x, y], true, shift);
+        }
+
+        function formatoNumero(valor, decimales = 2) {
+            if (valor === undefined || valor === null || isNaN(valor)) {
+                return '--';
+            }
+
+            return Number(valor).toFixed(decimales);
+        }
+
+        function actualizarTarjetas(data) {
+            document.getElementById('tempValue').innerText = formatoNumero(data.temp, 1);
+            document.getElementById('baroValue').innerText = formatoNumero(data.baro, 1);
+            document.getElementById('altValue').innerText = formatoNumero(data.alt, 1);
+            document.getElementById('acelValue').innerText = formatoNumero(data.acel, 2);
+        }
+
+        function actualizarGPS(data) {
+            const gpsFix = data.gps_fix === true;
+            const gpsOk = data.gps_ok === true;
+
+            document.getElementById('gpsFixText').innerText = gpsFix ? 'FIX válido' : 'Sin FIX';
+            document.getElementById('gpsFixText').style.color = gpsFix ? '#00ff99' : '#ffcc00';
+
+            document.getElementById('gpsSat').innerText = data.gps_sat ?? '--';
+            document.getElementById('gpsLat').innerText = gpsFix ? formatoNumero(data.gps_lat, 6) : '--';
+            document.getElementById('gpsLon').innerText = gpsFix ? formatoNumero(data.gps_lon, 6) : '--';
+            document.getElementById('gpsAlt').innerText = gpsFix ? `${formatoNumero(data.gps_alt, 1)} m` : '-- m';
+            document.getElementById('gpsSpeed').innerText = gpsFix ? `${formatoNumero(data.gps_speed, 2)} km/h` : '-- km/h';
+            document.getElementById('gpsTime').innerText = data.gps_time || '--:--:--';
+            document.getElementById('gpsDate').innerText = data.gps_date || '--/--/----';
+            document.getElementById('gpsChars').innerText = data.gps_chars ?? '--';
+            document.getElementById('gpsOk').innerText = gpsOk ? 'Recibiendo' : 'Sin datos';
+            document.getElementById('gpsOk').style.color = gpsOk ? '#00ff99' : '#ff4d4d';
+        }
+
+        function actualizarEstadoConexion(conectado) {
+            const dot = document.getElementById('statusDot');
+            const text = document.getElementById('statusText');
+
+            if (conectado) {
+                dot.classList.add('connected');
+                text.innerText = 'Conectado';
+            } else {
+                dot.classList.remove('connected');
+                text.innerText = 'Desconectado';
+            }
+        }
+
+        function actualizarHora() {
+            const ahora = new Date();
+            document.getElementById('lastUpdate').innerText =
+                `Última actualización: ${ahora.toLocaleTimeString()}`;
+        }
+
+        const gateway = `ws://${window.location.hostname}/ws`;
+        let websocket;
+
+        function iniciarWebSocket() {
+            websocket = new WebSocket(gateway);
+
+            websocket.onopen = () => {
+                actualizarEstadoConexion(true);
+            };
+
+            websocket.onclose = () => {
+                actualizarEstadoConexion(false);
+
+                setTimeout(() => {
+                    iniciarWebSocket();
+                }, 2000);
+            };
+
+            websocket.onerror = () => {
+                actualizarEstadoConexion(false);
+            };
+
+            websocket.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                const x = new Date().getTime();
+
+                actualizarTarjetas(data);
+                actualizarGPS(data);
+                actualizarHora();
+
+                agregarPunto(chartAcel, 0, x, Number(data.acel));
+                agregarPunto(chartAlt, 0, x, Number(data.alt));
+                agregarPunto(chartTemp, 0, x, Number(data.temp));
+                agregarPunto(chartBaro, 0, x, Number(data.baro));
+
+                agregarPunto(chartAccEjes, 0, x, Number(data.ax));
+                agregarPunto(chartAccEjes, 1, x, Number(data.ay));
+                agregarPunto(chartAccEjes, 2, x, Number(data.az));
+
+                agregarPunto(chartGyroEjes, 0, x, Number(data.gx));
+                agregarPunto(chartGyroEjes, 1, x, Number(data.gy));
+                agregarPunto(chartGyroEjes, 2, x, Number(data.gz));
+            };
+        }
+
+        iniciarWebSocket();
+    </script>
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<!-- 
+
+ANTES DE LOS SENSORES
+
+ <!DOCTYPE html>
+<html>
+<head>
+    <title>Telemetría Cohete - Misión Control</title>
+    <script src="/highcharts.js"></script>
+    <style>
+        body { 
+            font-family: sans-serif; 
+            background: #1a1a1a; 
+            color: white; 
+            text-align: center;
+        }
+
+        .grid { 
+            display: grid; 
+            grid-template-columns: 1fr 1fr; 
+            gap: 20px; 
+            padding: 20px; 
+        }
+
+        .chart-container { 
+            background: #2d2d2d; 
+            border-radius: 8px; 
+            padding: 10px; 
+        }
+    </style>
+</head>
+<body>
+    <h1>CENTRO DE CONTROL - TELEMETRÍA ESP32</h1>
+    <div id="status">Desconectado</div>
+
+    <div class="grid">
+        <div id="grafica-acel" class="chart-container"></div>
+        <div id="grafica-alt" class="chart-container"></div>
+        <div id="grafica-temp" class="chart-container"></div>
+        <div id="grafica-baro" class="chart-container"></div>
+    </div>
+
+    <script>
+        function crearGrafica(id, titulo, unidad, color) {
+            return new Highcharts.Chart({
+                chart: { 
+                    renderTo: id, 
+                    type: 'spline', 
+                    backgroundColor: '#2d2d2d' 
+                },
+                title: { 
+                    text: titulo, 
+                    style: { color: '#fff' } 
+                },
+                series: [{ 
+                    name: titulo, 
+                    data: [], 
+                    color: color 
+                }],
+                plotOptions: { 
+                    spline: { 
+                        marker: { enabled: false } 
+                    } 
+                },
+                xAxis: { 
+                    type: 'datetime' 
+                },
+                yAxis: { 
+                    title: { text: unidad } 
+                }
+            });
+        }
+
+        const chartAcel = crearGrafica('grafica-acel', 'Aceleración', 'G', '#ff4d4d');
+        const chartAlt = crearGrafica('grafica-alt', 'Altura', 'Metros', '#4da6ff');
+        const chartTemp = crearGrafica('grafica-temp', 'Temperatura', '°C', '#ffcc00');
+        const chartBaro = crearGrafica('grafica-baro', 'Presión', 'hPa', '#00ff99');
+
+        const gateway = `ws://${window.location.hostname}/ws`;
+        let websocket = new WebSocket(gateway);
+
+        websocket.onopen = () => { 
+            document.getElementById('status').innerText = 'CONECTADO'; 
+        };
+
+        websocket.onclose = () => {
+            document.getElementById('status').innerText = 'DESCONECTADO';
+        };
+
+        websocket.onerror = () => {
+            document.getElementById('status').innerText = 'ERROR DE CONEXIÓN';
+        };
+
+        websocket.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            const x = (new Date()).getTime();
+            
+            chartAcel.series[0].addPoint([x, data.acel], true, chartAcel.series[0].data.length > 20);
+            chartAlt.series[0].addPoint([x, data.alt], true, chartAlt.series[0].data.length > 20);
+            chartTemp.series[0].addPoint([x, data.temp], true, chartTemp.series[0].data.length > 20);
+            chartBaro.series[0].addPoint([x, data.baro], true, chartBaro.series[0].data.length > 20);
+        };
+    </script>
+</body>
+</html> -->
