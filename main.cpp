@@ -1,274 +1,157 @@
 #include <Arduino.h>
-#include <Wire.h>
+#include <TinyGPS++.h>
 
-#include <Adafruit_GFX.h>
-#include <Adafruit_SSD1306.h>
-#include <Adafruit_BMP280.h>
+// Objeto principal de la libreria TinyGPSPlus
+TinyGPSPlus gps;
 
-// --------------------------------------------------
-// Pines I2C ESP32 DEVKIT V1
-// --------------------------------------------------
+// UART2 del ESP32
+HardwareSerial gpsSerial(2);
 
-#define I2C_SDA 21
-#define I2C_SCL 22
+// Pines recomendados para UART2 en ESP32
+#define GPS_RX_PIN 16   // Conectar al TX del GPS
+#define GPS_TX_PIN 17   // Conectar al RX del GPS, opcional
+#define GPS_BAUD   9600
 
-// --------------------------------------------------
-// OLED SSD1306
-// --------------------------------------------------
-
-#define SCREEN_WIDTH 128
-#define SCREEN_HEIGHT 64
-
-#define OLED_RESET -1
-#define OLED_ADDRESS 0x3C
-
-// --------------------------------------------------
-// BMP280
-// --------------------------------------------------
-
-#define BMP280_ADDRESS 0x76
-
-// Presion nivel del mar
-#define SEA_LEVEL_HPA 1013.25
-
-// Offset de calibracion de temperatura
-#define OFFSET_CALIBRACION 4.0
-
-// --------------------------------------------------
-
-Adafruit_SSD1306 display(
-    SCREEN_WIDTH,
-    SCREEN_HEIGHT,
-    &Wire,
-    OLED_RESET
-);
-
-Adafruit_BMP280 bmp;
-
-// --------------------------------------------------
-// Variables
-// --------------------------------------------------
-
-float temperatura = 0.0;
-
-float temperaturaCalibrada = 0.0;
-
-float presion_hPa = 0.0;
-
-float altitud_m = 0.0;
-
-// --------------------------------------------------
-// Mostrar mensajes en OLED
-// --------------------------------------------------
-
-void mostrarMensaje(
-    String linea1,
-    String linea2 = "",
-    String linea3 = ""
-) {
-
-    display.clearDisplay();
-
-    display.setTextSize(1);
-
-    display.setTextColor(SSD1306_WHITE);
-
-    display.setCursor(0, 0);
-    display.println(linea1);
-
-    display.setCursor(0, 16);
-    display.println(linea2);
-
-    display.setCursor(0, 32);
-    display.println(linea3);
-
-    display.display();
-}
-
-// --------------------------------------------------
-// Leer BMP280
-// --------------------------------------------------
-
-void leerBMP280() {
-
-    // Temperatura real
-    temperatura = bmp.readTemperature();
-
-    // Temperatura calibrada
-    temperaturaCalibrada =
-        temperatura - OFFSET_CALIBRACION;
-
-    // Presion
-    presion_hPa =
-        bmp.readPressure() / 100.0;
-
-    // Altitud
-    altitud_m =
-        bmp.readAltitude(SEA_LEVEL_HPA);
-}
-
-// --------------------------------------------------
-// Mostrar datos en OLED
-// --------------------------------------------------
-
-void mostrarEnOLED() {
-
-    display.clearDisplay();
-
-    display.setTextColor(SSD1306_WHITE);
-
-    display.setTextSize(1);
-
-    display.setCursor(0, 0);
-    display.println("ESP32 + BMP280");
-
-    display.setCursor(0, 12);
-    display.print("Temp real: ");
-    display.print(temperatura, 1);
-    display.println(" C");
-
-    display.setCursor(0, 24);
-    display.print("Temp calib: ");
-    display.print(temperaturaCalibrada, 1);
-    display.println(" C");
-
-    display.setCursor(0, 36);
-    display.print("Pres: ");
-    display.print(presion_hPa, 1);
-    display.println(" hPa");
-
-    display.setCursor(0, 48);
-    display.print("Alt: ");
-    display.print(altitud_m, 1);
-    display.println(" m");
-
-    display.display();
-}
-
-// --------------------------------------------------
-// Mostrar datos en monitor serial
-// --------------------------------------------------
-
-void mostrarEnSerial() {
-
-    Serial.println("-------------------------");
-
-    Serial.print("Temperatura real: ");
-    Serial.print(temperatura);
-    Serial.println(" C");
-
-    Serial.print("Temperatura calibrada: ");
-    Serial.print(temperaturaCalibrada);
-    Serial.println(" C");
-
-    Serial.print("Presion: ");
-    Serial.print(presion_hPa);
-    Serial.println(" hPa");
-
-    Serial.print("Altitud aproximada: ");
-    Serial.print(altitud_m);
-    Serial.println(" m");
-}
-
-// --------------------------------------------------
-// Setup
-// --------------------------------------------------
+// Tiempo para imprimir datos cada cierto intervalo
+unsigned long previousMillis = 0;
+const unsigned long interval = 2000;  // Variar tiempo de recepcion de Datos
 
 void setup() {
+  // Serial hacia el computador
+  Serial.begin(115200);
+  delay(1000);
 
-    Serial.begin(115200);
+  // Serial hacia el modulo GPS
+  gpsSerial.begin(GPS_BAUD, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
 
-    delay(1000);
-
-    // Inicializar I2C
-    Wire.begin(I2C_SDA, I2C_SCL);
-
-    Serial.println(
-        "Iniciando ESP32 + OLED + BMP280"
-    );
-
-    // Inicializar OLED
-    if (!display.begin(
-            SSD1306_SWITCHCAPVCC,
-            OLED_ADDRESS
-        )) {
-
-        Serial.println(
-            "Error: OLED no detectada"
-        );
-
-        while (true) {
-            delay(1000);
-        }
-    }
-
-    mostrarMensaje(
-        "Iniciando...",
-        "OLED OK",
-        "Buscando BMP280"
-    );
-
-    delay(1500);
-
-    // Inicializar BMP280
-    if (!bmp.begin(0x76)) {
-
-        Serial.println(
-            "No encontrado en 0x76,"
-            " probando 0x77..."
-        );
-
-        if (!bmp.begin(0x77)) {
-
-            Serial.println(
-                "Error: BMP280 no detectado"
-            );
-
-            mostrarMensaje(
-                "Error BMP280",
-                "No detectado",
-                "Revise cables"
-            );
-
-            while (true) {
-                delay(1000);
-            }
-
-        } else {
-
-            Serial.println(
-                "BMP280 encontrado en 0x77"
-            );
-        }
-
-    } else {
-
-        Serial.println(
-            "BMP280 encontrado en 0x76"
-        );
-    }
-
-    mostrarMensaje(
-        "BMP280 OK",
-        "Midiendo...",
-        "Todo correcto"
-    );
-
-    delay(1500);
+  Serial.println();
+  Serial.println("====================================");
+  Serial.println(" Prueba GPS NEO-6M V2 con ESP32");
+  Serial.println(" PlatformIO + TinyGPSPlus");
+  Serial.println("====================================");
+  Serial.println("Conexiones:");
+  Serial.println("GPS VCC -> 3.3V o 5V segun modulo");
+  Serial.println("GPS GND -> GND ESP32");
+  Serial.println("GPS TX  -> GPIO16 ESP32");
+  Serial.println("GPS RX  -> GPIO17 ESP32 opcional");
+  Serial.println("------------------------------------");
+  Serial.println("Esperando datos del GPS...");
+  Serial.println("Haz la prueba en exterior para obtener coordenadas.");
+  Serial.println();
 }
 
-// --------------------------------------------------
-// Loop principal
-// --------------------------------------------------
-
 void loop() {
+  // Leer todos los caracteres disponibles desde el GPS
+  while (gpsSerial.available() > 0) {
+    char c = gpsSerial.read();
+    gps.encode(c);
+  }
 
-    leerBMP280();
+  // Imprimir informacion cada 1 segundo
+  unsigned long currentMillis = millis();
 
-    mostrarEnSerial();
+  if (currentMillis - previousMillis >= interval) {
+    previousMillis = currentMillis;
 
-    mostrarEnOLED();
+    Serial.println("========== ESTADO GPS ==========");
 
-    // Actualizacion cada 2 segundos
-    delay(2000);
+    // Verifica si el ESP32 esta recibiendo caracteres del GPS
+    Serial.print("Caracteres recibidos: ");
+    Serial.println(gps.charsProcessed());
+
+    // Verifica si las tramas NMEA tienen checksum correcto
+    Serial.print("Tramas validas: ");
+    Serial.println(gps.sentencesWithFix());
+
+    Serial.print("Checksums fallidos: ");
+    Serial.println(gps.failedChecksum());
+
+    // Satelites
+    Serial.print("Satelites: ");
+    if (gps.satellites.isValid()) {
+      Serial.println(gps.satellites.value());
+    } else {
+      Serial.println("No disponible");
+    }
+
+    // Latitud y longitud
+    if (gps.location.isValid()) {
+      Serial.print("Latitud: ");
+      Serial.println(gps.location.lat(), 6);
+
+      Serial.print("Longitud: ");
+      Serial.println(gps.location.lng(), 6);
+    } else {
+      Serial.println("Ubicacion: No valida todavia");
+    }
+
+    // Altitud
+    Serial.print("Altitud: ");
+    if (gps.altitude.isValid()) {
+      Serial.print(gps.altitude.meters());
+      Serial.println(" m");
+    } else {
+      Serial.println("No disponible");
+    }
+
+    // Hora UTC
+    Serial.print("Hora UTC: ");
+    if (gps.time.isValid()) {
+      if (gps.time.hour() < 10) Serial.print("0");
+      Serial.print(gps.time.hour());
+      Serial.print(":");
+
+      if (gps.time.minute() < 10) Serial.print("0");
+      Serial.print(gps.time.minute());
+      Serial.print(":");
+
+      if (gps.time.second() < 10) Serial.print("0");
+      Serial.println(gps.time.second());
+    } else {
+      Serial.println("No valida");
+    }
+
+    // Fecha UTC
+    Serial.print("Fecha UTC: ");
+    if (gps.date.isValid()) {
+      if (gps.date.day() < 10) Serial.print("0");
+      Serial.print(gps.date.day());
+      Serial.print("/");
+
+      if (gps.date.month() < 10) Serial.print("0");
+      Serial.print(gps.date.month());
+      Serial.print("/");
+
+      Serial.println(gps.date.year());
+    } else {
+      Serial.println("No valida");
+    }
+
+    // Trama lista para telemetria
+    if (gps.location.isValid()) {
+      String tramaGPS = "LAT:" + String(gps.location.lat(), 6) +
+                        ",LON:" + String(gps.location.lng(), 6) +
+                        ",SAT:" + String(gps.satellites.value());
+
+      Serial.print("Trama GPS: ");
+      Serial.println(tramaGPS);
+    } else {
+      Serial.println("Trama GPS: Sin coordenadas validas");
+    }
+
+    // Diagnostico si no llegan datos
+    if (millis() > 5000 && gps.charsProcessed() < 10) {
+      Serial.println();
+      Serial.println("ERROR: No se reciben datos del GPS.");
+      //Serial.println("Revisa:");
+      //Serial.println("1. GPS TX conectado a GPIO16");
+      //Serial.println("2. GPS GND conectado a GND del ESP32");
+      //Serial.println("3. Alimentacion correcta del modulo");
+      //Serial.println("4. Baudrate del GPS en 9600");
+      //Serial.println();
+    }
+
+    Serial.println("================================");
+    Serial.println();
+  }
 }
